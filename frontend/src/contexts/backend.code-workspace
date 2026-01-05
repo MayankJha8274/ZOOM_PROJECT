@@ -1,0 +1,12 @@
+/* flow */
+{
+	"folders": [
+		{
+			"path": "../../../backend"
+		},
+		{
+			"path": "../.."
+		}
+	],
+	"settings": {}
+}
