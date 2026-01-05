@@ -100,53 +100,47 @@ export default function VideoMeetComponent() {
 
     const getPermissions = async () => {
         try {
-            let videoAvail = false;
-            let audioAvail = false;
-
-            try {
-                const videoPermission = await navigator.mediaDevices.getUserMedia({ video: true });
-                if (videoPermission) {
-                    videoAvail = true;
-                    setVideoAvailable(true);
-                    console.log('Video permission granted');
-                    videoPermission.getTracks().forEach(track => track.stop()); // Stop the test stream
+            // Request video and audio together to get proper permission prompt
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            
+            if (stream) {
+                console.log('Video and Audio permission granted');
+                setVideoAvailable(true);
+                setAudioAvailable(true);
+                
+                // Set the stream to preview video
+                window.localStream = stream;
+                if (localVideoref.current) {
+                    localVideoref.current.srcObject = stream;
                 }
-            } catch (e) {
-                setVideoAvailable(false);
-                console.log('Video permission denied', e);
             }
 
-            try {
-                const audioPermission = await navigator.mediaDevices.getUserMedia({ audio: true });
-                if (audioPermission) {
-                    audioAvail = true;
-                    setAudioAvailable(true);
-                    console.log('Audio permission granted');
-                    audioPermission.getTracks().forEach(track => track.stop()); // Stop the test stream
-                }
-            } catch (e) {
-                setAudioAvailable(false);
-                console.log('Audio permission denied', e);
-            }
-
+            // Check if screen sharing is available
             if (navigator.mediaDevices.getDisplayMedia) {
                 setScreenAvailable(true);
             } else {
                 setScreenAvailable(false);
             }
-
-            // Get initial stream for preview
-            if (videoAvail || audioAvail) {
-                const userMediaStream = await navigator.mediaDevices.getUserMedia({ video: videoAvail, audio: audioAvail });
-                if (userMediaStream) {
-                    window.localStream = userMediaStream;
+        } catch (error) {
+            console.log('Permission error:', error);
+            
+            // Try video only if both failed
+            try {
+                const videoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                if (videoStream) {
+                    console.log('Video permission granted, audio denied');
+                    setVideoAvailable(true);
+                    setAudioAvailable(false);
+                    window.localStream = videoStream;
                     if (localVideoref.current) {
-                        localVideoref.current.srcObject = userMediaStream;
+                        localVideoref.current.srcObject = videoStream;
                     }
                 }
+            } catch (e) {
+                console.log('Video permission also denied', e);
+                setVideoAvailable(false);
+                setAudioAvailable(false);
             }
-        } catch (error) {
-            console.log(error);
         }
     };
 
@@ -175,7 +169,9 @@ export default function VideoMeetComponent() {
         } catch (e) { console.log(e) }
 
         window.localStream = stream
-        localVideoref.current.srcObject = stream
+        if (localVideoref.current) {
+            localVideoref.current.srcObject = stream
+        }
 
         for (let id in connections) {
             if (id === socketIdRef.current) continue
@@ -221,7 +217,7 @@ export default function VideoMeetComponent() {
 
     let getUserMedia = () => {
         if ((video && videoAvailable) || (audio && audioAvailable)) {
-            navigator.mediaDevices.getUserMedia({ video: video, audio: audio })
+            navigator.mediaDevices.getUserMedia({ video: video && videoAvailable, audio: audio && audioAvailable })
                 .then(getUserMediaSuccess)
                 .then((stream) => { })
                 .catch((e) => console.log(e))
@@ -486,8 +482,8 @@ export default function VideoMeetComponent() {
                     <Button variant="contained" onClick={connect}>Connect</Button>
 
 
-                    <div>
-                        <video ref={localVideoref} autoPlay muted></video>
+                    <div style={{marginTop: '20px', textAlign: 'center'}}>
+                        <video ref={localVideoref} autoPlay muted playsInline style={{width: '640px', height: '480px', background: '#000', borderRadius: '10px', border: '2px solid #fff'}}></video>
                     </div>
 
                 </div> :
@@ -550,7 +546,7 @@ export default function VideoMeetComponent() {
                     </div>
 
 
-                    <video className={styles.meetUserVideo} ref={localVideoref} autoPlay muted></video>
+                    <video className={styles.meetUserVideo} ref={localVideoref} autoPlay muted playsInline></video>
 
                     <div className={styles.conferenceView}>
                         {videos.map((video) => (
@@ -564,6 +560,7 @@ export default function VideoMeetComponent() {
                                         }
                                     }}
                                     autoPlay
+                                    playsInline
                                 >
                                 </video>
                             </div>
