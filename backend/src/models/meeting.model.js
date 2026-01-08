@@ -12,6 +12,7 @@ const meetingSchema = new Schema(
     {
         user_id: { type: String }, // Username of who joined the meeting
         meetingCode: { type: String, required: true }, // The meeting room code
+        meetingOwner: { type: String }, // Username of who created the meeting
         date: { type: Date, default: Date.now, required: true } // When they joined
     }
 )

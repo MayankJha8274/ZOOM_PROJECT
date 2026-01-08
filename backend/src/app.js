@@ -17,6 +17,7 @@ import { connectToSocket } from "./controllers/socketManager.js"; // Socket.io c
 
 import cors from "cors"; // Allow frontend to make requests from different origin
 import userRoutes from "./routes/users.routes.js"; // User authentication routes
+import attendanceRoutes from "./routes/attendance.routes.js"; // Attendance report routes
 
 // Initialize Express application
 const app = express();
@@ -37,6 +38,8 @@ app.use(express.urlencoded({ limit: "40kb", extended: true })); // Parse URL-enc
 // API ROUTES
 // All user-related endpoints (login, register, meeting history) are prefixed with /api/v1/users
 app.use("/api/v1/users", userRoutes);
+// All attendance-related endpoints (reports, owner reports) are prefixed with /api/v1/attendance
+app.use("/api/v1/attendance", attendanceRoutes);
 
 // START SERVER FUNCTION
 const start = async () => {

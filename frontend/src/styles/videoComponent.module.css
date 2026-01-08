@@ -29,20 +29,30 @@
 }
 
 .conferenceView { 
-
     display: flex;
-    
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
     padding: 10px;
     gap: 10px;
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
+.conferenceView > div {
+    flex: 0 1 auto;
+    max-width: calc(50% - 10px);
 }
 
 .conferenceView  video {
-    width: 40vw;
+    width: 100%;
     height: 40vh;
-    min-width: 30vw;
+    min-width: 250px;
+    max-width: 600px;
     border-radius: 10px;
     background: black;
     object-fit: cover;
+    border: 2px solid white;
 }
 
 .chatRoom {
