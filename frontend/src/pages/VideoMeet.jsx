@@ -317,60 +317,6 @@ const enrollFace = async () => {
     };
   }, [modelsLoaded, faceDescriptor, meetingCode, userId, username, socketRef.current]);
 
-  // Listen for live attendance updates (for dashboard)
-  useEffect(() => {
-    if (!socketRef.current) return;
-    const liveHandler = (attendanceData) => {
-      console.log('📊 Live attendance update received:', attendanceData);
-      setLiveAttendance(attendanceData);
-    };
-    socketRef.current.on('live-attendance', liveHandler);
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.off('live-attendance', liveHandler);
-      }
-    };
-  }, []);
-
-  // Listen for attendance report
-  useEffect(() => {
-    if (!socketRef.current) return;
-    const handler = report => {
-      console.log('📊 Attendance report received:', report);
-      setAttendanceReport(report);
-      setShowReportModal(true);
-    };
-    const ownerHandler = report => {
-      console.log('👑 OWNER ATTENDANCE REPORT RECEIVED:', report);
-      console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: gold; font-weight: bold');
-      console.log('%c👑 YOU ARE THE MEETING OWNER', 'color: gold; font-size: 20px; font-weight: bold');
-      console.log('%c📊 Attendance Report Summary:', 'color: gold; font-weight: bold');
-      report.participants.forEach(p => {
-        const emoji = p.status === 'Present' ? '✅' : p.status === 'Partial' ? '⚠️' : '❌';
-        console.log(`${emoji} ${p.name}: ${p.verifiedPercent}% - ${p.status}`);
-      });
-      console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: gold; font-weight: bold');
-      
-      setAttendanceReport(report);
-      setShowReportModal(true);
-      setOwnerReportReceived(true);
-      
-      // Show browser notification if permission granted
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('📊 Meeting Attendance Report Ready', {
-          body: `As meeting owner, you have received the attendance report for ${report.participants.length} participants.`,
-          icon: '/logo192.png'
-        });
-      }
-    };
-    socketRef.current.on('attendance-report', handler);
-    socketRef.current.on('owner-attendance-report', ownerHandler);
-    return () => {
-      socketRef.current.off('attendance-report', handler);
-      socketRef.current.off('owner-attendance-report', ownerHandler);
-    };
-  }, []);
-
   // Show enrollment after username
   useEffect(() => {
     if (!askForUsername && modelsLoaded && !faceDescriptor) {
@@ -388,20 +334,44 @@ const enrollFace = async () => {
   // === CORE WEBRTC & MEDIA FUNCTIONS ===
   const getPermissions = async () => {
     try {
+      console.log('🎥 Requesting camera and microphone permissions...');
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
       });
       window.localStream = stream;
       
       // Enable audio and video tracks by default
-      stream.getAudioTracks().forEach(track => track.enabled = true);
-      stream.getVideoTracks().forEach(track => track.enabled = true);
+      const audioTracks = stream.getAudioTracks();
+      const videoTracks = stream.getVideoTracks();
+      console.log('✅ Got', audioTracks.length, 'audio track(s) and', videoTracks.length, 'video track(s)');
+      
+      audioTracks.forEach((track, idx) => {
+        track.enabled = true;
+        console.log(`🎤 Audio Track ${idx}:`, track.label, '- Enabled:', track.enabled);
+      });
+      videoTracks.forEach((track, idx) => {
+        track.enabled = true;
+        console.log(`🎥 Video Track ${idx}:`, track.label, '- Enabled:', track.enabled);
+      });
       
       if (localVideoref.current) localVideoref.current.srcObject = stream;
       if (lobbyVideoRef.current) lobbyVideoRef.current.srcObject = stream;
       setVideoAvailable(true);
       setAudioAvailable(true);
+      setAudio(true);  // Enable audio by default
+      setVideo(true);  // Enable video by default
+      console.log('✅ Media permissions granted and tracks enabled');
+      console.log('🎤 Audio tracks:', stream.getAudioTracks().map(t => ({ label: t.label, enabled: t.enabled })));
+      console.log('🎥 Video tracks:', stream.getVideoTracks().map(t => ({ label: t.label, enabled: t.enabled })));
+      console.log('🔊 window.localStream set with', stream.getAudioTracks().length, 'audio tracks');
       if (navigator.mediaDevices.getDisplayMedia) setScreenAvailable(true);
     } catch (err) {
       try {
@@ -427,8 +397,16 @@ const enrollFace = async () => {
 
   // debug: get media when joining from lobby
   const getMedia = () => {
-  connectToSocketServer();
-};
+    console.log('📡 Connecting to socket server...');
+    console.log('🎤 window.localStream exists:', !!window.localStream);
+    if (window.localStream) {
+      console.log('🎤 Audio tracks in localStream:', window.localStream.getAudioTracks().length);
+      window.localStream.getAudioTracks().forEach(track => {
+        console.log('🎤 Track:', track.label, '- Enabled:', track.enabled, '- ReadyState:', track.readyState);
+      });
+    }
+    connectToSocketServer();
+  };
 
   const getUserMedia = () => {
     if ((video && videoAvailable) || (audio && audioAvailable)) {
@@ -458,15 +436,19 @@ const enrollFace = async () => {
     } catch (e) {}
     window.localStream = stream;
     
-    // Enable audio and video tracks
+    // Enable audio and video tracks - always enable audio for transmission
     stream.getAudioTracks().forEach(track => {
-      track.enabled = true;
-      console.log('Audio track enabled:', track.label);
+      track.enabled = true; // ALWAYS enable for WebRTC transmission
+      console.log('🎤 Audio track set to:', track.enabled, '- Label:', track.label);
     });
     stream.getVideoTracks().forEach(track => {
-      track.enabled = true;
-      console.log('Video track enabled:', track.label);
+      track.enabled = true; // Enable video too initially
+      console.log('🎥 Video track set to:', track.enabled, '- Label:', track.label);
     });
+    
+    // Update state to reflect audio is working
+    setAudio(true);
+    setVideo(true);
     
     if (localVideoref.current) localVideoref.current.srcObject = stream;
     if (lobbyVideoRef.current) lobbyVideoRef.current.srcObject = stream;
@@ -562,6 +544,35 @@ const enrollFace = async () => {
         setIsMeetingOwner(true);
       });
 
+      // Listen for live attendance updates (for dashboard)
+      socketRef.current.on('live-attendance', (attendanceData) => {
+        console.log('📊 Live attendance update received:', attendanceData);
+        setLiveAttendance(attendanceData.participants || []);
+      });
+
+      // Listen for attendance reports
+      socketRef.current.on('attendance-report', (report) => {
+        console.log('📊 Attendance report received:', report);
+        setAttendanceReport(report);
+        setShowReportModal(true);
+      });
+
+      socketRef.current.on('owner-attendance-report', (report) => {
+        console.log('👑 OWNER ATTENDANCE REPORT RECEIVED:', report);
+        console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: gold; font-weight: bold');
+        console.log('%c👑 YOU ARE THE MEETING OWNER', 'color: gold; font-size: 20px; font-weight: bold');
+        console.log('%c📊 Attendance Report Summary:', 'color: gold; font-weight: bold');
+        report.participants.forEach(p => {
+          const emoji = p.status === 'Present' ? '✅' : p.status === 'Partial' ? '⚠️' : '❌';
+          console.log(`${emoji} ${p.name}: ${p.verifiedPercent}% - ${p.status}`);
+        });
+        console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: gold; font-weight: bold');
+        
+        setAttendanceReport(report);
+        setShowReportModal(true);
+        setOwnerReportReceived(true);
+      });
+
       socketRef.current.on('chat-message', addMessage);
       socketRef.current.on('user-left', id =>
         setVideos(v => v.filter(vid => vid.socketId !== id)),
@@ -579,22 +590,53 @@ const enrollFace = async () => {
                 JSON.stringify({ ice: e.candidate }),
               );
           };
-          connections[socketListId].onaddstream = e => {
+          connections[socketListId].ontrack = e => {
+            console.log(`📹 Received track from peer ${socketListId}:`, e.track.kind);
+            console.log(`  ⬇️ Track details: ${e.track.label} - Enabled: ${e.track.enabled} - Muted: ${e.track.muted} - ReadyState: ${e.track.readyState}`);
+            
+            let remoteStream = null;
+            if (e.streams && e.streams[0]) {
+              remoteStream = e.streams[0];
+            } else {
+              // Create new stream if not provided
+              const existing = videos.find(v => v.socketId === socketListId);
+              if (existing && existing.stream) {
+                remoteStream = existing.stream;
+                remoteStream.addTrack(e.track);
+              } else {
+                remoteStream = new MediaStream();
+                remoteStream.addTrack(e.track);
+              }
+            }
+            
+            console.log(`🎤 Remote stream now has ${remoteStream.getAudioTracks().length} audio, ${remoteStream.getVideoTracks().length} video tracks`);
+            
             const exists = videos.find(v => v.socketId === socketListId);
             if (exists) {
               setVideos(v =>
                 v.map(vid =>
                   vid.socketId === socketListId
-                    ? { ...vid, stream: e.stream }
+                    ? { ...vid, stream: remoteStream }
                     : vid,
                 ),
               );
             } else {
-              setVideos(v => [...v, { socketId: socketListId, stream: e.stream }]);
+              setVideos(v => [...v, { socketId: socketListId, stream: remoteStream }]);
             }
           };
-          if (window.localStream)
-            connections[socketListId].addStream(window.localStream);
+          if (window.localStream) {
+            console.log(`✅ Adding localStream to new peer connection ${socketListId}`);
+            console.log(`🎤 LocalStream has ${window.localStream.getAudioTracks().length} audio, ${window.localStream.getVideoTracks().length} video tracks`);
+            
+            window.localStream.getTracks().forEach(track => {
+              console.log(`  ➡️ Adding ${track.kind} track: ${track.label} - Enabled: ${track.enabled} - ReadyState: ${track.readyState}`);
+              connections[socketListId].addTrack(track, window.localStream);
+            });
+            
+            console.log(`🔊 All tracks successfully added to peer ${socketListId}`);
+          } else {
+            console.error('❌ ERROR: window.localStream is null! Cannot add stream to peer connection.');
+          }
         });
       });
     });
@@ -630,30 +672,43 @@ const handleVideo = () => {
 
   // debug audio
   const handleAudio = () => {
-  setAudio(prev => {
-    const newState = !prev;
+    setAudio(prev => {
+      const newState = !prev;
+      console.log('🎤 Toggling audio:', prev ? 'OFF' : 'ON', '→', newState ? 'ON' : 'OFF');
 
-    if (window.localStream) {
-      window.localStream.getAudioTracks().forEach(track => {
-        track.enabled = newState;
-      });
-    }
+      if (window.localStream) {
+        const audioTracks = window.localStream.getAudioTracks();
+        console.log('🎤 Found', audioTracks.length, 'audio track(s)');
+        
+        if (audioTracks.length === 0) {
+          console.error('⚠️ No audio tracks found! Mic might not be permitted.');
+          alert('No microphone detected. Please check browser permissions.');
+          return prev;
+        }
+        
+        audioTracks.forEach((track, idx) => {
+          track.enabled = newState;
+          console.log(`🎤 Track ${idx}:`, track.label, '- Enabled:', track.enabled, '- ReadyState:', track.readyState, '- Muted:', track.muted);
+        });
+        
+        console.log(`✅ Audio ${newState ? 'ENABLED' : 'DISABLED'} - other participants ${newState ? 'CAN' : 'CANNOT'} hear you`);
+      } else {
+        console.error('⚠️ No localStream found!');
+        return prev;
+      }
 
-    return newState;
-  });
-};
+      return newState;
+    });
+  };
 
 
   const handleScreen = () => setScreen(s => !s);
 
   const handleEndCall = () => {
+    console.log('📞 Ending meeting...');
     socketRef.current?.emit('end-meeting', { meetingId: meetingCode });
-    try {
-      localVideoref.current.srcObject
-        .getTracks()
-        .forEach(t => t.stop());
-    } catch (e) {}
-    window.location.href = '/';
+    // Don't stop tracks or redirect yet - let user see the report first
+    // They will be stopped when modal is closed
   };
 
   const connect = () => {
@@ -752,13 +807,29 @@ const handleVideo = () => {
           )}
 
           <div className={styles.buttonContainers}>
-            <IconButton onClick={handleVideo} style={{ color: 'white' }}>
+            <IconButton onClick={handleVideo} style={{ color: 'white' }} title="Toggle Video">
               {video ? <VideocamIcon /> : <VideocamOffIcon />}
             </IconButton>
-            <IconButton onClick={handleEndCall} style={{ color: 'red' }}>
+            <IconButton 
+              onClick={handleEndCall} 
+              style={{ 
+                color: 'white',
+                background: '#dc3545',
+                padding: '12px'
+              }}
+              title={isMeetingOwner ? "End Meeting & Generate Attendance Report" : "Leave Meeting"}
+            >
               <CallEndIcon />
             </IconButton>
-            <IconButton onClick={handleAudio} style={{ color: 'white' }}>
+            <IconButton 
+              onClick={handleAudio} 
+              style={{ 
+                color: audio ? 'white' : '#ff4444',
+                background: audio ? 'transparent' : 'rgba(255, 68, 68, 0.2)',
+                border: audio ? 'none' : '2px solid #ff4444'
+              }}
+              title={audio ? "Mute Microphone" : "Unmute Microphone"}
+            >
               {audio ? <MicIcon /> : <MicOffIcon />}
             </IconButton>
             {screenAvailable && (
@@ -774,11 +845,13 @@ const handleVideo = () => {
                 onClick={() => setShowDashboard(!showDashboard)}
                 style={{ 
                   color: showDashboard ? '#FFD700' : 'white',
-                  background: showDashboard ? 'rgba(255, 215, 0, 0.2)' : 'transparent'
+                  background: showDashboard ? 'rgba(255, 215, 0, 0.3)' : liveAttendance.length > 0 ? 'rgba(76, 175, 80, 0.2)' : 'transparent',
+                  border: liveAttendance.length > 0 ? '2px solid rgba(76, 175, 80, 0.5)' : 'none',
+                  animation: liveAttendance.length > 0 && !showDashboard ? 'pulse 2s infinite' : 'none'
                 }}
-                title="Attendance Dashboard"
+                title={`Attendance Dashboard (${liveAttendance.length} participants tracked)`}
               >
-                <Badge badgeContent={liveAttendance.length} color="primary">
+                <Badge badgeContent={liveAttendance.length} color="success">
                   <span style={{ fontSize: '24px' }}>📊</span>
                 </Badge>
               </IconButton>
@@ -802,15 +875,39 @@ const handleVideo = () => {
           ></video>
 
           <div className={styles.conferenceView}>
-            {videos.map((v, index) => (
-              <div key={`${v.socketId}-${index}`}>
-                <video
-                  ref={ref => ref && v.stream && (ref.srcObject = v.stream)}
-                  autoPlay
-                  playsInline
-                />
-              </div>
-            ))}
+            {videos.map((v, index) => {
+              console.log(`� Rendering remote video ${index} for socket: ${v.socketId}`, v.stream ? 'has stream' : 'NO STREAM!');
+              if (v.stream) {
+                console.log(`  🎤 Stream ${v.socketId} audio tracks:`, v.stream.getAudioTracks().length);
+                v.stream.getAudioTracks().forEach(track => {
+                  console.log(`    ♪ Audio: ${track.label} - Enabled: ${track.enabled} - Muted: ${track.muted} - ReadyState: ${track.readyState}`);
+                });
+              }
+              return (
+                <div key={`${v.socketId}-${index}`}>
+                  <video
+                    ref={ref => {
+                      if (ref && v.stream) {
+                        ref.srcObject = v.stream;
+                        // Ensure audio is enabled on remote videos
+                        ref.muted = false;
+                        ref.volume = 1.0;
+                        ref.setAttribute('playsinline', '');
+                        ref.setAttribute('autoplay', '');
+                        console.log(`🔊 Video element ${v.socketId} configured:`, {
+                          muted: ref.muted,
+                          volume: ref.volume,
+                          readyState: ref.readyState,
+                          paused: ref.paused
+                        });
+                      }
+                    }}
+                    autoPlay
+                    playsInline
+                  />
+                </div>
+              );
+            })}
           </div>
 
           {/* Attendance Dashboard */}
@@ -1114,11 +1211,24 @@ const handleVideo = () => {
             </TableBody>
           </Table>
           <Button
-            onClick={() => setShowReportModal(false)}
+            onClick={() => {
+              setShowReportModal(false);
+              // Clean up and redirect after closing report
+              try {
+                if (localVideoref.current?.srcObject) {
+                  localVideoref.current.srcObject.getTracks().forEach(t => t.stop());
+                }
+              } catch (e) {
+                console.error('Error stopping tracks:', e);
+              }
+              setTimeout(() => {
+                window.location.href = '/';
+              }, 300);
+            }}
             variant="contained"
             sx={{ mt: 3, display: 'block', mx: 'auto' }}
           >
-            Close
+            Close & Exit Meeting
           </Button>
         </Box>
       </Modal>
