@@ -39,7 +39,7 @@ function App() {
             <Route path='/auth' element={<Authentication />} />
 
             {/* Home dashboard - create or join meetings (requires login) */}
-            <Route path='/home's element={<HomeComponent />} />
+            <Route path='/home' element={<HomeComponent />} />
             
             {/* Meeting history page (requires login) */}
             <Route path='/history' element={<History />} />

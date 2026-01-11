@@ -37,7 +37,11 @@ export const connectToSocket = (server) => {
             methods: ["GET", "POST"],
             allowedHeaders: ["*"],
             credentials: true
-        }
+        },
+        transports: ['websocket', 'polling'], // Ensure both transports work
+        allowEIO3: true, // Compatibility
+        pingTimeout: 60000,
+        pingInterval: 25000
     });
 
     // EVENT: When a user connects to the server

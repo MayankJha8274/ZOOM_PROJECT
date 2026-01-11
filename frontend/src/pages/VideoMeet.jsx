@@ -37,7 +37,14 @@ const server_url = server;
 
 let connections = {};
 const peerConfigConnections = {
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' }
+  ],
+  iceCandidatePoolSize: 10
 };
 
 // tiny face detector options (recommended for webcam) [web:24]
@@ -710,7 +717,14 @@ const enrollFace = async () => {
   };
 
   const connectToSocketServer = () => {
-    socketRef.current = io.connect(server_url, { secure: false });
+    const isProduction = server_url.includes('https');
+    socketRef.current = io.connect(server_url, { 
+      secure: isProduction,
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 10
+    });
     socketRef.current.on('signal', gotMessageFromServer);
     socketRef.current.on('connect', () => {
       console.log('🔌 Socket connected! Socket ID:', socketRef.current.id);
