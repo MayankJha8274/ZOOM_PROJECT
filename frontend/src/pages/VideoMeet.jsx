@@ -36,6 +36,8 @@ import server from '../environment';
 const server_url = server;
 
 let connections = {};
+let iceCandidateQueue = {}; // Queue ICE candidates until remote description is set
+
 const peerConfigConnections = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -683,6 +685,17 @@ const enrollFace = async () => {
           .setRemoteDescription(new RTCSessionDescription(signal.sdp))
           .then(() => {
             console.log(`✅ Set remote ${signal.sdp.type} from ${fromId}, new state: ${peerConnection.signalingState}`);
+            
+            // Process queued ICE candidates now that remote description is set
+            if (iceCandidateQueue[fromId] && iceCandidateQueue[fromId].length > 0) {
+              console.log(`🧊 Processing ${iceCandidateQueue[fromId].length} queued ICE candidates for ${fromId}`);
+              iceCandidateQueue[fromId].forEach(ice => {
+                peerConnection.addIceCandidate(new RTCIceCandidate(ice))
+                  .catch(err => console.error('❌ Error adding queued ICE candidate:', err));
+              });
+              iceCandidateQueue[fromId] = [];
+            }
+            
             if (signal.sdp.type === 'offer') {
               return peerConnection.createAnswer();
             }
@@ -708,10 +721,24 @@ const enrollFace = async () => {
             console.error(`❌ Error handling ${signal.sdp.type} from ${fromId}:`, err);
           });
       }
+      
       if (signal.ice) {
-        if (connections[fromId]) {
-          connections[fromId].addIceCandidate(new RTCIceCandidate(signal.ice))
-            .catch(err => console.error('❌ Error adding ICE candidate:', err));
+        const peerConnection = connections[fromId];
+        if (peerConnection) {
+          // Check if remote description is set
+          if (peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+            // Remote description is set, add ICE candidate immediately
+            peerConnection.addIceCandidate(new RTCIceCandidate(signal.ice))
+              .then(() => console.log(`🧊 Added ICE candidate from ${fromId}`))
+              .catch(err => console.error('❌ Error adding ICE candidate:', err));
+          } else {
+            // Remote description not set yet, queue the ICE candidate
+            if (!iceCandidateQueue[fromId]) {
+              iceCandidateQueue[fromId] = [];
+            }
+            iceCandidateQueue[fromId].push(signal.ice);
+            console.log(`⏳ Queued ICE candidate from ${fromId} (waiting for remote description)`);
+          }
         }
       }
     }
@@ -777,6 +804,11 @@ const enrollFace = async () => {
           connections[id].close();
           delete connections[id];
           console.log('🗑️ Removed peer connection for:', id);
+        }
+        // Clean up ICE candidate queue
+        if (iceCandidateQueue[id]) {
+          delete iceCandidateQueue[id];
+          console.log('🗑️ Cleared ICE candidate queue for:', id);
         }
       });
       socketRef.current.on('user-joined', (id, clients) => {
