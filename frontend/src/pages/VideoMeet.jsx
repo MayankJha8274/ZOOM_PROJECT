@@ -120,7 +120,8 @@ export default function VideoMeetComponent() {
   // separate stream for modal so it never depends on others
   const modalStreamRef = useRef(null);
 
-  const meetingCode = window.location.href;
+  // Extract just the room code from URL path (e.g., "/abc123" -> "abc123")
+  const meetingCode = window.location.pathname.substring(1) || 'unknown-room';
 
   // Load face-api models from CDN [web:52]
   useEffect(() => {
@@ -728,7 +729,8 @@ const enrollFace = async () => {
     socketRef.current.on('signal', gotMessageFromServer);
     socketRef.current.on('connect', () => {
       console.log('🔌 Socket connected! Socket ID:', socketRef.current.id);
-      socketRef.current.emit('join-call', window.location.href, uniqueUserId, username || 'Anonymous', false);
+      console.log('🚪 Joining meeting room:', meetingCode);
+      socketRef.current.emit('join-call', meetingCode, uniqueUserId, username || 'Anonymous', false);
       socketIdRef.current = socketRef.current.id;
 
       // Listen for owner assignment from server

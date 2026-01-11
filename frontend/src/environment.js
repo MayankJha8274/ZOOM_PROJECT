@@ -4,7 +4,7 @@ const IS_PROD = window.location.hostname !== 'localhost' && window.location.host
 // IMPORTANT: Replace with your BACKEND Render URL (the one running Node.js/Express)
 // NOT your frontend URL (the static site)
 const server = IS_PROD ?
-    "https://meettrack-ai-backend.onrender.com" :  // ⚠️ UPDATE THIS with your actual backend URL
+    "https://meettrack-ai.onrender.com" :  // ⚠️ UPDATE THIS with your actual backend URL
     "http://localhost:8000"
 
 export default server;
