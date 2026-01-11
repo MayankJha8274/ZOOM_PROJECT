@@ -1318,7 +1318,7 @@ const handleVideo = () => {
               zIndex: 1000,
               overflowY: 'auto'
             }}>
-              <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}> 
                 <span>📊</span>
                 <span style={{ fontWeight: 'bold' }}>Live Attendance Dashboard</span>
               </Typography>
